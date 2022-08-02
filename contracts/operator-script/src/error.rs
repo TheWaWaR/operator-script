@@ -4,11 +4,11 @@ use ckb_std::error::SysError;
 #[repr(i8)]
 pub enum Error {
     IndexOutOfBound = 1,
-    ItemMissing,
-    LengthNotEnough,
-    Encoding,
+    ItemMissing = 2,
+    LengthNotEnough = 3,
+    Encoding = 4,
     // Add customized errors here...
-    MyError,
+    InvalidScriptArgs = 5,
 }
 
 impl From<SysError> for Error {

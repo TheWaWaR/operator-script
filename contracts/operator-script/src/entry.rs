@@ -3,17 +3,22 @@ use core::result::Result;
 
 // Import heap related library from `alloc`
 // https://doc.rust-lang.org/alloc/index.html
-use alloc::{vec, vec::Vec};
+// use alloc::{vec, vec::Vec};
 
 // Import CKB syscalls and structures
 // https://nervosnetwork.github.io/ckb-std/riscv64imac-unknown-none-elf/doc/ckb_std/index.html
 use ckb_std::{
-    debug,
-    high_level::{load_script, load_tx_hash},
     ckb_types::{bytes::Bytes, prelude::*},
+    debug,
+    high_level::load_script,
 };
 
 use crate::error::Error;
+
+#[link(name = "dl-c-impl", kind = "static")]
+extern "C" {
+    fn ckb_validate_type_id(type_id: *const u8) -> isize;
+}
 
 pub fn main() -> Result<(), Error> {
     // remove below examples and write your code here
@@ -22,16 +27,8 @@ pub fn main() -> Result<(), Error> {
     let args: Bytes = script.args().unpack();
     debug!("script args is {:?}", args);
 
-    // return an error if args is invalid
-    if args.is_empty() {
-        return Err(Error::MyError);
-    }
-
-    let tx_hash = load_tx_hash()?;
-    debug!("tx hash is {:?}", tx_hash);
-
-    let _buf: Vec<_> = vec![0u8; 32];
+    let ret = unsafe { ckb_validate_type_id(args.as_ref().as_ptr()) };
+    debug!("ret: {}", ret);
 
     Ok(())
 }
-

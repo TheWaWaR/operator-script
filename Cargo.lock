@@ -1183,6 +1183,7 @@ dependencies = [
 name = "operator-script"
 version = "0.1.0"
 dependencies = [
+ "cc",
  "ckb-std",
 ]
 
