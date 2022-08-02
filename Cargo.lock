@@ -1585,6 +1585,7 @@ dependencies = [
 name = "tests"
 version = "0.1.0"
 dependencies = [
+ "ckb-hash",
  "ckb-testtool",
  "tentacle-multiaddr",
  "tentacle-secio",

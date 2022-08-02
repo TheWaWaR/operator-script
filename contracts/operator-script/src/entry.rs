@@ -28,7 +28,9 @@ pub fn main() -> Result<(), Error> {
     debug!("script args is {:?}", args);
 
     let ret = unsafe { ckb_validate_type_id(args.as_ref().as_ptr()) };
-    debug!("ret: {}", ret);
+    if ret != 0 {
+        return Err(Error::InvalidTypeId);
+    }
 
     Ok(())
 }

@@ -1,4 +1,5 @@
 use super::*;
+use ckb_hash::new_blake2b;
 use ckb_testtool::builtin::ALWAYS_SUCCESS;
 use ckb_testtool::ckb_error::Error;
 use ckb_testtool::ckb_types::{bytes::Bytes, core::TransactionBuilder, packed::*, prelude::*};
@@ -20,7 +21,7 @@ fn assert_script_error(err: Error, err_code: i8) {
 }
 
 #[test]
-fn test_success() {
+fn test_type_id_success() {
     // deploy contract
     let mut context = Context::default();
     let type_bin: Bytes = Loader::default().load_binary("operator-script");
@@ -28,10 +29,6 @@ fn test_success() {
     let lock_out_point = context.deploy_cell(ALWAYS_SUCCESS.clone());
 
     // prepare scripts
-    let type_script = context
-        .build_script(&type_out_point, Bytes::from(vec![42]))
-        .expect("type script");
-    let type_script_dep = CellDep::new_builder().out_point(type_out_point).build();
     let lock_script = context
         .build_script(&lock_out_point, Bytes::default())
         .expect("lock script");
@@ -48,6 +45,20 @@ fn test_success() {
     let input = CellInput::new_builder()
         .previous_output(input_out_point)
         .build();
+
+    let type_id = {
+        let mut blake2b = new_blake2b();
+        blake2b.update(input.as_slice());
+        blake2b.update(&0u64.to_le_bytes());
+        let mut ret = vec![0u8; 32];
+        blake2b.finalize(&mut ret);
+        Bytes::from(ret)
+    };
+    let type_script = context
+        .build_script(&type_out_point, type_id)
+        .expect("type script");
+    let type_script_dep = CellDep::new_builder().out_point(type_out_point).build();
+
     let outputs = vec![
         CellOutput::new_builder()
             .capacity(500u64.pack())

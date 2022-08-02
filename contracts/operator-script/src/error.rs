@@ -8,7 +8,7 @@ pub enum Error {
     LengthNotEnough = 3,
     Encoding = 4,
     // Add customized errors here...
-    InvalidScriptArgs = 5,
+    InvalidTypeId = 5,
 }
 
 impl From<SysError> for Error {
