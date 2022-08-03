@@ -99,6 +99,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "block-buffer"
+version = "0.10.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0bf7fe51849ea569fd452f37822f606a5cabb684dc918707a0193fd4664ff324"
+dependencies = [
+ "generic-array",
+]
+
+[[package]]
 name = "bs58"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -744,6 +753,7 @@ version = "0.10.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f2fb860ca6fafa5552fb6d0e816a69c8e49f0908bf524e30a90d97c85892d506"
 dependencies = [
+ "block-buffer 0.10.2",
  "crypto-common",
 ]
 
@@ -1680,11 +1690,22 @@ version = "0.9.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4d58a1e1bf39749807d89cf2d98ac2dfa0ff1cb3faa38fbb64dd88ac8013d800"
 dependencies = [
- "block-buffer",
+ "block-buffer 0.9.0",
  "cfg-if",
  "cpufeatures",
  "digest 0.9.0",
  "opaque-debug",
+]
+
+[[package]]
+name = "sha2"
+version = "0.10.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "55deaec60f81eefe3cce0dc50bda92d6d8e88f2a27df7c5033b42afeb1ed2676"
+dependencies = [
+ "cfg-if",
+ "cpufeatures",
+ "digest 0.10.3",
 ]
 
 [[package]]
@@ -1776,7 +1797,7 @@ dependencies = [
  "bs58",
  "bytes",
  "serde",
- "sha2",
+ "sha2 0.9.9",
  "unsigned-varint",
 ]
 
@@ -1798,7 +1819,7 @@ dependencies = [
  "rand 0.7.3",
  "ring",
  "secp256k1",
- "sha2",
+ "sha2 0.9.9",
  "tokio",
  "tokio-util",
  "unsigned-varint",
@@ -1813,6 +1834,7 @@ dependencies = [
  "ckb-testtool",
  "rand 0.8.5",
  "rsa",
+ "sha2 0.10.2",
  "tentacle-multiaddr",
  "tentacle-secio",
 ]
