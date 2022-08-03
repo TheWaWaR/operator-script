@@ -250,6 +250,8 @@ fn verify_charge(
             index += 1;
         }
     }
+    debug!("host input total: {}", host_input_total);
+    debug!("host output total: {}", host_output_total);
     if host_output_total - host_input_total != capacity_change {
         debug!("invalid host capacity change");
         return Err(Error::InvalidCharge);

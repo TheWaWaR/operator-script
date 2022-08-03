@@ -12,6 +12,7 @@
 #![feature(panic_info_message)]
 
 // define modules
+#[rustfmt::skip]
 mod code_hashes;
 mod entry;
 mod error;
