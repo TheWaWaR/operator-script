@@ -218,7 +218,7 @@ fn test_create_success() {
 }
 
 #[test]
-fn test_charge_by_owner_signature() {
+fn test_charge_by_signature() {
     // deploy contract
     let mut context = Context::default();
     let type_bin: Bytes = Loader::default().load_binary("operator-script");
