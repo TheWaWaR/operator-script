@@ -97,21 +97,13 @@ pub fn main() -> Result<(), Error> {
             .to_opt()
             .ok_or(Error::InvalidArgs)?
             .unpack();
-        let witness_input_slice = witness_input.as_ref();
-        let action = u32::from_le_bytes(witness_input_slice[0..4].try_into().unwrap());
+        let action = u32::from_le_bytes(witness_input.as_ref()[0..4].try_into().unwrap());
+        let signature = &witness_input.as_ref()[4..];
         match action {
-            1 => verify_charge(
-                script_args.as_ref(),
-                &witness_input_slice[0..4],
-                &input_data,
-                &output_data,
-            )?,
-            2 => verify_extend_timelock(
-                script_args.as_ref(),
-                &witness_input_slice[0..4],
-                &input_data,
-                &output_data,
-            )?,
+            1 => verify_charge(script_args.as_ref(), signature, &input_data, &output_data)?,
+            2 => {
+                verify_extend_timelock(script_args.as_ref(), signature, &input_data, &output_data)?
+            }
             _ => panic!("invalid action"),
         }
     }
@@ -208,7 +200,7 @@ fn verify_create() -> Result<(), Error> {
 
 fn verify_charge(
     script_args: &[u8],
-    witness_input: &[u8],
+    signature: &[u8],
     input_data: &[u8],
     output_data: &[u8],
 ) -> Result<(), Error> {
@@ -271,12 +263,12 @@ fn verify_charge(
     blake2b.update(&output_data[0..8]);
     blake2b.finalize(&mut message);
 
-    verify_rsa_signature(&message, witness_input, input_data, false)
+    verify_rsa_signature(&message, signature, input_data, false)
 }
 
 fn verify_extend_timelock(
     script_args: &[u8],
-    witness_input: &[u8],
+    signature: &[u8],
     input_data: &[u8],
     output_data: &[u8],
 ) -> Result<(), Error> {
@@ -321,12 +313,12 @@ fn verify_extend_timelock(
     blake2b.update(&output_data[16..24]);
     blake2b.finalize(&mut message);
 
-    verify_rsa_signature(&message, witness_input, input_data, true)
+    verify_rsa_signature(&message, signature, input_data, true)
 }
 
 fn verify_rsa_signature(
     message: &[u8; 32],
-    witness_input: &[u8],
+    signature: &[u8],
     input_data: &[u8],
     owner_only: bool,
 ) -> Result<(), Error> {
@@ -340,9 +332,6 @@ fn verify_rsa_signature(
             .get(b"validate_signature")
             .expect("get function symbol validate_signature from dyanmic library");
     }
-
-    let signature = witness_input;
-    let signature_len = signature.len();
 
     //   typedef struct RsaInfo {
     //   uint8_t algorithm_id;
@@ -373,7 +362,7 @@ fn verify_rsa_signature(
         let ret = validate_signature_fn(
             core::ptr::null(),
             signature.as_ptr(),
-            signature_len,
+            signature.len(),
             message.as_ptr(),
             BLAKE2B_BLOCK_SIZE,
             core::ptr::null(),
