@@ -373,3 +373,157 @@ fn test_charge_by_signature() {
         ScriptError::validation_failure(&type_script, 6).input_type_script(0)
     );
 }
+
+#[test]
+fn test_extend_timelock() {
+    // deploy contract
+    let mut context = Context::default();
+    let type_bin: Bytes = Loader::default().load_binary("operator-script");
+    let type_out_point = context.deploy_cell(type_bin);
+    let lock_out_point = context.deploy_cell(ALWAYS_SUCCESS.clone());
+    let rsa_out_point = context.deploy_cell(Bytes::from(RSA_BIN.to_vec()));
+    let rsa_dep = CellDep::new_builder().out_point(rsa_out_point).build();
+
+    let type_id = Bytes::from(vec![3u8; 32]);
+    let type_script = context
+        .build_script(&type_out_point, type_id.clone())
+        .expect("type script");
+    let type_script_dep = CellDep::new_builder().out_point(type_out_point).build();
+
+    let host_lock_script = context
+        .build_script(&lock_out_point, Bytes::from(vec![2u8; 20]))
+        .expect("host lock");
+    let host_lock_hash = blake2b_256(host_lock_script.as_slice());
+
+    let bit_size: usize = 2048;
+    let (host_privkey, host_pubkey) = gen_keypair(bit_size);
+    let (owner_privkey, owner_pubkey) = gen_keypair(bit_size);
+    let (member1_privkey, member1_pubkey) = gen_keypair(bit_size);
+    let (member2_privkey, member2_pubkey) = gen_keypair(bit_size);
+    let timelock = {
+        let start = SystemTime::now();
+        let mut since_the_epoch = start
+            .duration_since(UNIX_EPOCH)
+            .expect("Time went backwards");
+        // one hour later;
+        since_the_epoch += Duration::from_secs(3600);
+        since_the_epoch.as_secs() * 1000
+    };
+    let message_price: u64 = 100;
+    let mut room_info = RoomInfo {
+        current_count: 3,
+        message_price,
+        timelock,
+        host_pubkey,
+        host_lock_hash,
+        owner_pubkey,
+        members_pubkey_hash: vec![member1_pubkey, member2_pubkey],
+    };
+    let prev_cell_data = room_info.to_cell_data();
+    let next_timelock = room_info.timelock + 66;
+    room_info.timelock = next_timelock;
+    let next_cell_data = room_info.to_cell_data();
+
+    // prepare scripts
+    let lock_script = context
+        .build_script(&lock_out_point, Bytes::default())
+        .expect("lock script");
+    let lock_script_dep = CellDep::new_builder().out_point(lock_out_point).build();
+
+    // room info cell
+    let input1_out_point = context.create_cell(
+        CellOutput::new_builder()
+            .capacity(10_000u64.pack())
+            .type_(Some(type_script.clone()).pack())
+            .lock(lock_script.clone())
+            .build(),
+        Bytes::from(prev_cell_data),
+    );
+    // host's cell to receiver the capacity
+    let input2_out_point = context.create_cell(
+        CellOutput::new_builder()
+            .capacity(1000u64.pack())
+            .lock(host_lock_script.clone())
+            .build(),
+        Bytes::new(),
+    );
+    let since: u64 = 0x4000_0000_0000_0000 | next_timelock;
+    let inputs = vec![
+        CellInput::new_builder()
+            .previous_output(input1_out_point)
+            .since(since.pack())
+            .build(),
+        CellInput::new_builder()
+            .previous_output(input2_out_point)
+            .build(),
+    ];
+
+    let outputs = vec![
+        CellOutput::new_builder()
+            .capacity(10_000u64.pack())
+            .type_(Some(type_script.clone()).pack())
+            .lock(lock_script.clone())
+            .build(),
+        CellOutput::new_builder()
+            .capacity(1000u64.pack())
+            .lock(host_lock_script)
+            .build(),
+    ];
+
+    let outputs_data = vec![Bytes::from(next_cell_data), Bytes::new()];
+
+    // the message to sign
+    let message = {
+        let mut hasher = new_blake2b();
+        hasher.update(type_id.as_ref());
+        hasher.update(&next_timelock.to_le_bytes()[..]);
+        let mut ret = [0u8; 32];
+        hasher.finalize(&mut ret);
+        ret
+    };
+    // build transaction
+    let base_tx = TransactionBuilder::default()
+        .inputs(inputs)
+        .outputs(outputs)
+        .outputs_data(outputs_data.pack())
+        .cell_dep(type_script_dep)
+        .cell_dep(lock_script_dep)
+        .cell_dep(rsa_dep)
+        .build();
+
+    // only owner key can extend
+    let witness_data = build_witness(&owner_privkey, Action::ExtendTimelock, &message[..]);
+    let witness = WitnessArgs::new_builder()
+        .input_type(Some(Bytes::from(witness_data)).pack())
+        .build()
+        .as_bytes();
+    let tx = base_tx
+        .as_advanced_builder()
+        .witness(witness.pack())
+        .build();
+    let tx = context.complete_tx(tx);
+    let cycles = context
+        .verify_tx(&tx, MAX_CYCLES)
+        .expect("pass verification");
+    println!("consume cycles: {}", cycles);
+
+    // all other key can not extend
+    for privkey in [&host_privkey, &member1_privkey, &member2_privkey] {
+        let witness_data = build_witness(privkey, Action::ExtendTimelock, &message[..]);
+        let witness = WitnessArgs::new_builder()
+            .input_type(Some(Bytes::from(witness_data)).pack())
+            .build()
+            .as_bytes();
+        let tx = base_tx
+            .as_advanced_builder()
+            .witness(witness.pack())
+            .build();
+        let tx = context.complete_tx(tx);
+        // run
+        let err = context.verify_tx(&tx, MAX_CYCLES).unwrap_err();
+        assert_error_eq!(
+            err,
+            ScriptError::validation_failure(&type_script, 6).input_type_script(0)
+        );
+    }
+}
