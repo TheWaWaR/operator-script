@@ -4,7 +4,7 @@ use std::{
     path::Path,
 };
 
-use blake2b_rs::{Blake2b, Blake2bBuilder};
+use blake2b_rs::Blake2bBuilder;
 
 const BUF_SIZE: usize = 8 * 1024;
 const CKB_HASH_PERSONALIZATION: &[u8] = b"ckb-default-hash";

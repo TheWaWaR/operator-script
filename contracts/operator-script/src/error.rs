@@ -9,17 +9,15 @@ pub enum Error {
     Encoding = 4,
     // Add customized errors here...
     InvalidTypeId = 5,
-    InvalidRoomInfo = 6,
-    InvalidSignature = 7,
-    InvalidCount = 8,
-    InvalidTimelock = 9,
+    InvalidSignature = 6,
+    InvalidCount = 7,
+    InvalidTimelock = 8,
+    InvalidCellData = 9,
+    InvalidCharge = 10,
+    InvalidSince = 11,
 
     // For rsa
-    SyscallError,
-    InvalidArgs0,
-    InvalidArgs1,
-    ValidateSignatureError,
-    ArgsMismatched,
+    InvalidArgs,
 }
 
 impl From<SysError> for Error {
@@ -34,4 +32,3 @@ impl From<SysError> for Error {
         }
     }
 }
-
