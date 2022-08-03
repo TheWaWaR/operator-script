@@ -254,7 +254,7 @@ fn test_charge_by_signature() {
     };
     let message_price: u64 = 100;
     let mut room_info = RoomInfo {
-        current_count: 0,
+        current_count: 3,
         message_price,
         timelock,
         host_pubkey,
@@ -264,7 +264,8 @@ fn test_charge_by_signature() {
     };
     let prev_cell_data = room_info.to_cell_data();
     let delta_count: u64 = 20;
-    room_info.current_count += delta_count;
+    let next_count = room_info.current_count + delta_count;
+    room_info.current_count = next_count;
     let next_cell_data = room_info.to_cell_data();
     let delta_capacity = delta_count * message_price;
 
@@ -318,7 +319,7 @@ fn test_charge_by_signature() {
     let message = {
         let mut hasher = new_blake2b();
         hasher.update(type_id.as_ref());
-        hasher.update(&room_info.current_count.to_le_bytes()[..]);
+        hasher.update(&next_count.to_le_bytes()[..]);
         let mut ret = [0u8; 32];
         hasher.finalize(&mut ret);
         ret
