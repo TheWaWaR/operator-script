@@ -3,12 +3,10 @@ use core::convert::TryInto;
 use core::result::Result;
 
 // Import heap related library from `alloc`
-// https://doc.rust-lang.org/alloc/index.html
 use alloc::vec::Vec;
 
-// Import CKB syscalls and structures
-// https://nervosnetwork.github.io/ckb-std/riscv64imac-unknown-none-elf/doc/ckb_std/index.html
 use blake2b_ref::{Blake2b, Blake2bBuilder};
+// Import CKB syscalls and structures
 use ckb_std::{
     ckb_constants::*,
     ckb_types::{bytes::Bytes, prelude::*},
