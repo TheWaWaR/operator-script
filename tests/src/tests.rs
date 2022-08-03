@@ -9,6 +9,7 @@ const MAX_CYCLES: u64 = 10_000_000;
 
 // error numbers
 const ERROR_EMPTY_ARGS: i8 = 5;
+const RSA_BIN: &[u8] = include_bytes!("../validate_signature_rsa");
 
 fn assert_script_error(err: Error, err_code: i8) {
     let error_string = err.to_string();
@@ -27,6 +28,8 @@ fn test_type_id_success() {
     let type_bin: Bytes = Loader::default().load_binary("operator-script");
     let type_out_point = context.deploy_cell(type_bin);
     let lock_out_point = context.deploy_cell(ALWAYS_SUCCESS.clone());
+    let rsa_out_point = context.deploy_cell(Bytes::from(RSA_BIN.to_vec()));
+    let rsa_dep = CellDep::new_builder().out_point(rsa_out_point).build();
 
     // prepare scripts
     let lock_script = context
@@ -80,6 +83,7 @@ fn test_type_id_success() {
         .outputs_data(outputs_data.pack())
         .cell_dep(type_script_dep)
         .cell_dep(lock_script_dep)
+        .cell_dep(rsa_dep)
         .build();
     let tx = context.complete_tx(tx);
 

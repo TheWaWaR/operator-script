@@ -1,3 +1,6 @@
 [submodule "contracts/operator-script/ckb-c-stdlib"]
 	path = contracts/operator-script/ckb-c-stdlib
 	url = https://github.com/nervosnetwork/ckb-c-stdlib.git
+[submodule "contracts/operator-script/ckb-production-scripts"]
+	path = contracts/operator-script/ckb-production-scripts
+	url = https://github.com/nervosnetwork/ckb-production-scripts.git

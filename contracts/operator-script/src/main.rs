@@ -14,6 +14,7 @@
 // define modules
 mod entry;
 mod error;
+mod code_hashes;
 
 use core::arch::asm;
 use ckb_std::{
