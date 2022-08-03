@@ -217,9 +217,9 @@ fn verify_charge(
     let capacity_change = price.checked_mul(next_count - prev_count).unwrap();
 
     let input_capacity = load_cell_capacity(0, Source::GroupInput)?;
-    let output_capacity = load_cell_capacity(0, Source::GroupInput)?;
+    let output_capacity = load_cell_capacity(0, Source::GroupOutput)?;
     if input_capacity - output_capacity != capacity_change {
-        debug!("invalid owner capacity change");
+        debug!("invalid owner capacity change: delta={}", capacity_change);
         return Err(Error::InvalidCharge);
     }
 
@@ -235,6 +235,7 @@ fn verify_charge(
                     break;
                 }
                 Err(err) => {
+                    debug!("load cell lock hash error: {:?}", err);
                     return Err(err.into());
                 }
             };
@@ -278,7 +279,7 @@ fn verify_extend_timelock(
         debug!("next timelock value must greater than previous timelock");
         return Err(Error::InvalidTimelock);
     }
-    // TODO: allow change host/members/price
+    // TODO: allow change host/members/price fields
     if input_data[0..16] != output_data[0..16] || input_data[24..] != output_data[24..] {
         debug!("data field other then count can not change");
         return Err(Error::InvalidCellData);
@@ -375,7 +376,9 @@ fn verify_rsa_signature(
     }
     let pub_key_hash = calculate_pub_key_hash(signature, key_size);
     let owner_pubkey = &input_data[OWNER_OFFSET..OWNER_OFFSET + 20];
+    debug!("expected pubkey hash: {:?}", pub_key_hash);
     if &pub_key_hash == owner_pubkey {
+        debug!("match owner pubkey, hash: {:?}", owner_pubkey);
         return Ok(());
     } else if owner_only {
         return Err(Error::InvalidSignature);
@@ -385,6 +388,10 @@ fn verify_rsa_signature(
         for idx in 0..member_len as usize {
             let offset = MEMBER_LEN_OFFSET + 2 + idx * 20;
             if &pub_key_hash == &input_data[offset..offset + 20] {
+                debug!(
+                    "match member pubkey, hash: {:?}",
+                    &input_data[offset..offset + 20]
+                );
                 return Ok(());
             }
         }

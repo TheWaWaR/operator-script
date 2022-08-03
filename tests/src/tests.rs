@@ -1,37 +1,18 @@
 use super::*;
 use ckb_hash::{blake2b_256, new_blake2b};
 use ckb_testtool::builtin::ALWAYS_SUCCESS;
-use ckb_testtool::ckb_error::Error;
+use ckb_testtool::ckb_error::assert_error_eq;
+use ckb_testtool::ckb_script::ScriptError;
 use ckb_testtool::ckb_types::{bytes::Bytes, core::TransactionBuilder, packed::*, prelude::*};
 use ckb_testtool::context::Context;
-use rsa::{
-    hash::Hash,
-    padding::PaddingScheme,
-    // pkcs8::{DecodePrivateKey, DecodePublicKey},
-    pkcs1::{DecodeRsaPrivateKey, DecodeRsaPublicKey, EncodeRsaPrivateKey, EncodeRsaPublicKey},
-    PublicKey,
-    PublicKeyParts,
-    RsaPrivateKey,
-    RsaPublicKey,
-};
+use rsa::{hash::Hash, padding::PaddingScheme, PublicKeyParts, RsaPrivateKey, RsaPublicKey};
 use sha2::{Digest, Sha256};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 const MAX_CYCLES: u64 = 10_000_000;
 
 // error numbers
-const ERROR_EMPTY_ARGS: i8 = 5;
 const RSA_BIN: &[u8] = include_bytes!("../../contracts/operator-script/validate_signature_rsa");
-
-fn assert_script_error(err: Error, err_code: i8) {
-    let error_string = err.to_string();
-    assert!(
-        error_string.contains(format!("error code {} ", err_code).as_str()),
-        "error_string: {}, expected_error_code: {}",
-        error_string,
-        err_code
-    );
-}
 
 struct RoomInfo {
     current_count: u64,
@@ -93,7 +74,13 @@ fn gen_keypair(bit_size: usize) -> (RsaPrivateKey, RsaPublicKey) {
     (priv_key, pub_key)
 }
 
-fn build_witness(privkey: &RsaPrivateKey, message: &[u8]) -> Vec<u8> {
+#[repr(u32)]
+enum Action {
+    Charge = 1,
+    ExtendTimelock = 2,
+}
+
+fn build_witness(privkey: &RsaPrivateKey, action: Action, message: &[u8]) -> Vec<u8> {
     let pubkey = privkey.to_public_key();
     let bit_size = pubkey.size() * 8;
     let key_size: u8 = match bit_size {
@@ -112,23 +99,24 @@ fn build_witness(privkey: &RsaPrivateKey, message: &[u8]) -> Vec<u8> {
     let digest = hasher.finalize();
     let signature = privkey.sign(sign_padding, digest.as_slice()).unwrap();
     assert_eq!(signature.len(), pubkey.size());
-    let mut witness = vec![0u8; pubkey.size() * 2 + 8];
+    let mut witness = vec![0u8; 4 + pubkey.size() * 2 + 8];
+    witness[0..4].copy_from_slice(&(action as u32).to_le_bytes()[..]);
     // use rsa to verify signature
-    witness[0] = 1;
+    witness[4] = 1;
     // key size (enum)
-    witness[1] = key_size;
+    witness[5] = key_size;
     // pkcs#1.5
-    witness[2] = 0;
+    witness[6] = 0;
     // sha2_256
-    witness[3] = 6;
+    witness[7] = 6;
 
     let pubkey_data = rsa_pubkey_data(&pubkey);
     // pubkey.E
-    witness[4..8].copy_from_slice(&pubkey_data[0..4]);
+    witness[8..12].copy_from_slice(&pubkey_data[0..4]);
     // pubkey.N
-    witness[8..8 + pubkey.size()].copy_from_slice(&pubkey_data[4..]);
+    witness[12..12 + pubkey.size()].copy_from_slice(&pubkey_data[4..]);
     // signature
-    witness[8 + pubkey.size()..].copy_from_slice(&signature);
+    witness[12 + pubkey.size()..].copy_from_slice(&signature);
     witness
 }
 
@@ -251,10 +239,10 @@ fn test_charge_by_owner_signature() {
     let host_lock_hash = blake2b_256(host_lock_script.as_slice());
 
     let bit_size: usize = 2048;
-    let host_pubkey = gen_keypair(bit_size).1;
+    let (host_privkey, host_pubkey) = gen_keypair(bit_size);
     let (owner_privkey, owner_pubkey) = gen_keypair(bit_size);
-    let member1_pubkey = gen_keypair(bit_size).1;
-    let member2_pubkey = gen_keypair(bit_size).1;
+    let (member1_privkey, member1_pubkey) = gen_keypair(bit_size);
+    let (member2_privkey, member2_pubkey) = gen_keypair(bit_size);
     let timelock = {
         let start = SystemTime::now();
         let mut since_the_epoch = start
@@ -315,7 +303,7 @@ fn test_charge_by_owner_signature() {
     let outputs = vec![
         CellOutput::new_builder()
             .capacity((10_000 - delta_capacity).pack())
-            .type_(Some(type_script).pack())
+            .type_(Some(type_script.clone()).pack())
             .lock(lock_script.clone())
             .build(),
         CellOutput::new_builder()
@@ -335,23 +323,50 @@ fn test_charge_by_owner_signature() {
         hasher.finalize(&mut ret);
         ret
     };
-    let witness = build_witness(&owner_privkey, &message[..]);
-
     // build transaction
-    let tx = TransactionBuilder::default()
+    let base_tx = TransactionBuilder::default()
         .inputs(inputs)
         .outputs(outputs)
         .outputs_data(outputs_data.pack())
         .cell_dep(type_script_dep)
         .cell_dep(lock_script_dep)
         .cell_dep(rsa_dep)
-        .witness(Bytes::from(witness).pack())
+        .build();
+
+    for privkey in [&owner_privkey, &member1_privkey, &member2_privkey] {
+        let witness_data = build_witness(privkey, Action::Charge, &message[..]);
+        let witness = WitnessArgs::new_builder()
+            .input_type(Some(Bytes::from(witness_data)).pack())
+            .build()
+            .as_bytes();
+
+        let tx = base_tx
+            .as_advanced_builder()
+            .witness(witness.pack())
+            .build();
+        let tx = context.complete_tx(tx);
+
+        // run
+        let cycles = context
+            .verify_tx(&tx, MAX_CYCLES)
+            .expect("pass verification");
+        println!("consume cycles: {}", cycles);
+    }
+
+    let witness_data = build_witness(&host_privkey, Action::Charge, &message[..]);
+    let witness = WitnessArgs::new_builder()
+        .input_type(Some(Bytes::from(witness_data)).pack())
+        .build()
+        .as_bytes();
+    let tx = base_tx
+        .as_advanced_builder()
+        .witness(witness.pack())
         .build();
     let tx = context.complete_tx(tx);
-
     // run
-    let cycles = context
-        .verify_tx(&tx, MAX_CYCLES)
-        .expect("pass verification");
-    println!("consume cycles: {}", cycles);
+    let err = context.verify_tx(&tx, MAX_CYCLES).unwrap_err();
+    assert_error_eq!(
+        err,
+        ScriptError::validation_failure(&type_script, 6).input_type_script(0)
+    );
 }
