@@ -9,7 +9,7 @@ use rsa::{hash::Hash, padding::PaddingScheme, PublicKeyParts, RsaPrivateKey, Rsa
 use sha2::{Digest, Sha256};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-const MAX_CYCLES: u64 = 10_000_000;
+const MAX_CYCLES: u64 = 28_000_000;
 
 // error numbers
 const RSA_BIN: &[u8] = include_bytes!("../../contracts/operator-script/validate_signature_rsa");
@@ -86,7 +86,7 @@ fn build_witness(privkey: &RsaPrivateKey, action: Action, message: &[u8]) -> Vec
     let key_size: u8 = match bit_size {
         1024 => 1,
         2048 => 2,
-        4098 => 3,
+        4096 => 3,
         _ => {
             panic!("invalid bit size: {}", bit_size);
         }
@@ -241,8 +241,9 @@ fn test_charge_by_signature() {
     let bit_size: usize = 2048;
     let (host_privkey, host_pubkey) = gen_keypair(bit_size);
     let (owner_privkey, owner_pubkey) = gen_keypair(bit_size);
-    let (member1_privkey, member1_pubkey) = gen_keypair(bit_size);
-    let (member2_privkey, member2_pubkey) = gen_keypair(bit_size);
+    let (member1_privkey, member1_pubkey) = gen_keypair(1024);
+    let (member2_privkey, member2_pubkey) = gen_keypair(2048);
+    let (member3_privkey, member3_pubkey) = gen_keypair(4096);
     let timelock = {
         let start = SystemTime::now();
         let mut since_the_epoch = start
@@ -260,7 +261,7 @@ fn test_charge_by_signature() {
         host_pubkey,
         host_lock_hash,
         owner_pubkey,
-        members_pubkey_hash: vec![member1_pubkey, member2_pubkey],
+        members_pubkey_hash: vec![member1_pubkey, member2_pubkey, member3_pubkey],
     };
     let prev_cell_data = room_info.to_cell_data();
     let delta_count: u64 = 20;
@@ -335,7 +336,12 @@ fn test_charge_by_signature() {
         .build();
 
     // owner key or member's key can charge
-    for privkey in [&owner_privkey, &member1_privkey, &member2_privkey] {
+    for privkey in [
+        &owner_privkey,
+        &member1_privkey,
+        &member2_privkey,
+        &member3_privkey,
+    ] {
         let witness_data = build_witness(privkey, Action::Charge, &message[..]);
         let witness = WitnessArgs::new_builder()
             .input_type(Some(Bytes::from(witness_data)).pack())
