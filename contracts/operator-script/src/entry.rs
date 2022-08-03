@@ -400,6 +400,6 @@ fn verify_rsa_signature(
             }
         }
     }
-    debug!("charge pubkey not match");
+    debug!("pubkey not match");
     Err(Error::InvalidSignature)
 }
