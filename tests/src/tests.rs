@@ -1,15 +1,26 @@
 use super::*;
-use ckb_hash::new_blake2b;
+use ckb_hash::{blake2b_256, new_blake2b};
 use ckb_testtool::builtin::ALWAYS_SUCCESS;
 use ckb_testtool::ckb_error::Error;
 use ckb_testtool::ckb_types::{bytes::Bytes, core::TransactionBuilder, packed::*, prelude::*};
 use ckb_testtool::context::Context;
+use rsa::{
+    hash::Hash,
+    padding::PaddingScheme,
+    // pkcs8::{DecodePrivateKey, DecodePublicKey},
+    pkcs1::{DecodeRsaPrivateKey, DecodeRsaPublicKey, EncodeRsaPrivateKey, EncodeRsaPublicKey},
+    PublicKey,
+    PublicKeyParts,
+    RsaPrivateKey,
+    RsaPublicKey,
+};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 const MAX_CYCLES: u64 = 10_000_000;
 
 // error numbers
 const ERROR_EMPTY_ARGS: i8 = 5;
-const RSA_BIN: &[u8] = include_bytes!("../validate_signature_rsa");
+const RSA_BIN: &[u8] = include_bytes!("../../contracts/operator-script/validate_signature_rsa");
 
 fn assert_script_error(err: Error, err_code: i8) {
     let error_string = err.to_string();
@@ -21,8 +32,69 @@ fn assert_script_error(err: Error, err_code: i8) {
     );
 }
 
+struct RoomInfo {
+    current_count: u64,
+    message_price: u64,
+    timelock: u64,
+    // Host's RSA public key blake160 hash
+    host_pubkey: RsaPublicKey,
+    // Host's lock script hash, for receiving the charge capacity
+    host_lock_hash: [u8; 32],
+    // Owner's RSA public key blake160 hash
+    owner_pubkey: RsaPublicKey,
+    members_pubkey_hash: Vec<RsaPublicKey>,
+}
+
+fn rsa_pubkey_data(pubkey: &RsaPublicKey) -> Vec<u8> {
+    let mut e = pubkey.e().to_bytes_le();
+    let mut n = pubkey.n().to_bytes_le();
+    while e.len() < 4 {
+        e.push(0);
+    }
+    while n.len() < pubkey.size() {
+        n.push(0)
+    }
+    e.extend(n);
+    e
+}
+
+fn rsa_pubkey_blake160(pubkey: &RsaPublicKey) -> [u8; 20] {
+    let hash = blake2b_256(&rsa_pubkey_data(pubkey));
+    let mut blake160 = [0u8; 20];
+    blake160.copy_from_slice(&hash[0..20]);
+    blake160
+}
+
+impl RoomInfo {
+    fn to_cell_data(&self) -> Vec<u8> {
+        let data_len = 8 + 8 + 8 + 20 + 32 + 20 + 2 + 20 * self.members_pubkey_hash.len();
+        let mut data = vec![0u8; data_len];
+        data[0..8].copy_from_slice(&self.current_count.to_le_bytes()[..]);
+        data[8..16].copy_from_slice(&self.message_price.to_le_bytes()[..]);
+        data[16..24].copy_from_slice(&self.timelock.to_le_bytes()[..]);
+        data[24..44].copy_from_slice(&rsa_pubkey_blake160(&self.host_pubkey)[..]);
+        data[44..76].copy_from_slice(&self.host_lock_hash[..]);
+        data[76..96].copy_from_slice(&rsa_pubkey_blake160(&self.owner_pubkey)[..]);
+        data[96..98].copy_from_slice(&(self.members_pubkey_hash.len() as u16).to_le_bytes()[..]);
+        let mut offset = 98;
+        for pubkey in &self.members_pubkey_hash {
+            data[offset..offset + 20].copy_from_slice(&rsa_pubkey_blake160(pubkey)[..]);
+            offset += 20;
+        }
+        data
+    }
+}
+
+fn gen_keypair() -> (RsaPrivateKey, RsaPublicKey) {
+    let mut rng = rand::thread_rng();
+    let bit_size = 2048;
+    let priv_key = RsaPrivateKey::new(&mut rng, bit_size).expect("generate a key");
+    let pub_key = priv_key.to_public_key();
+    (priv_key, pub_key)
+}
+
 #[test]
-fn test_type_id_success() {
+fn test_create_success() {
     // deploy contract
     let mut context = Context::default();
     let type_bin: Bytes = Loader::default().load_binary("operator-script");
@@ -30,6 +102,30 @@ fn test_type_id_success() {
     let lock_out_point = context.deploy_cell(ALWAYS_SUCCESS.clone());
     let rsa_out_point = context.deploy_cell(Bytes::from(RSA_BIN.to_vec()));
     let rsa_dep = CellDep::new_builder().out_point(rsa_out_point).build();
+
+    let host_pubkey = gen_keypair().1;
+    let owner_pubkey = gen_keypair().1;
+    let member1_pubkey = gen_keypair().1;
+    let member2_pubkey = gen_keypair().1;
+    let timelock = {
+        let start = SystemTime::now();
+        let mut since_the_epoch = start
+            .duration_since(UNIX_EPOCH)
+            .expect("Time went backwards");
+        // one hour later;
+        since_the_epoch += Duration::from_secs(3600);
+        since_the_epoch.as_secs() * 1000
+    };
+    let room_info = RoomInfo {
+        current_count: 0,
+        message_price: 1000,
+        timelock,
+        host_pubkey,
+        host_lock_hash: [1u8; 32],
+        owner_pubkey,
+        members_pubkey_hash: vec![member1_pubkey, member2_pubkey],
+    };
+    let cell_data = room_info.to_cell_data();
 
     // prepare scripts
     let lock_script = context
@@ -74,7 +170,7 @@ fn test_type_id_success() {
             .build(),
     ];
 
-    let outputs_data = vec![Bytes::new(); 2];
+    let outputs_data = vec![Bytes::from(cell_data), Bytes::new()];
 
     // build transaction
     let tx = TransactionBuilder::default()

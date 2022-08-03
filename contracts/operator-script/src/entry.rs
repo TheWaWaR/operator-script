@@ -224,8 +224,8 @@ fn verify_charge(
     }
 
     let host_lock_hash = &input_data[44..44 + 32];
-    let mut host_input_total = 0u64;
-    let mut host_output_total = 0u64;
+    let mut host_input_total: u64 = 0;
+    let mut host_output_total: u64 = 0;
     for source in [Source::Input, Source::Output] {
         let mut index = 0;
         loop {
@@ -333,7 +333,7 @@ fn verify_rsa_signature(
             .expect("get function symbol validate_signature from dyanmic library");
     }
 
-    //   typedef struct RsaInfo {
+    // struct RsaInfo {
     //   uint8_t algorithm_id;
     //   uint8_t key_size;
     //   uint8_t padding;
@@ -341,7 +341,7 @@ fn verify_rsa_signature(
     //   uint32_t E;
     //   uint8_t N[PLACEHOLDER_SIZE];
     //   uint8_t sig[PLACEHOLDER_SIZE];
-    // } RsaInfo;
+    // };
     let algorithm_id = signature[0];
     assert_eq!(algorithm_id, 1);
 
