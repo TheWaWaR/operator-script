@@ -318,7 +318,7 @@ fn test_charge_by_signature() {
     let message = {
         let mut hasher = new_blake2b();
         hasher.update(type_id.as_ref());
-        hasher.update(&delta_count.to_le_bytes()[..]);
+        hasher.update(&room_info.current_count.to_le_bytes()[..]);
         let mut ret = [0u8; 32];
         hasher.finalize(&mut ret);
         ret
