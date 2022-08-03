@@ -294,6 +294,7 @@ fn verify_extend_timelock(
     let lock_value = since.extract_lock_value().unwrap();
     match lock_value {
         LockValue::Timestamp(value) => {
+            debug!("since.timestamp: {}", value);
             if value < prev_ts {
                 debug!("time not reached");
                 return Err(Error::InvalidSince);

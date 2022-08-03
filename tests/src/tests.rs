@@ -420,7 +420,9 @@ fn test_extend_timelock() {
         members_pubkey_hash: vec![member1_pubkey, member2_pubkey],
     };
     let prev_cell_data = room_info.to_cell_data();
-    let next_timelock = room_info.timelock + 66;
+    let prev_timelock = room_info.timelock;
+    // extend 66 seconds
+    let next_timelock = prev_timelock + 66000;
     room_info.timelock = next_timelock;
     let next_cell_data = room_info.to_cell_data();
 
@@ -447,7 +449,9 @@ fn test_extend_timelock() {
             .build(),
         Bytes::new(),
     );
-    let since: u64 = 0x4000_0000_0000_0000 | next_timelock;
+    println!("prev_timelock: {}", prev_timelock);
+    // the timestamp value in since is in seconds
+    let since: u64 = 0x4000_0000_0000_0000 | (prev_timelock / 1000);
     let inputs = vec![
         CellInput::new_builder()
             .previous_output(input1_out_point)
