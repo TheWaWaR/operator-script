@@ -283,7 +283,7 @@ fn test_charge_by_owner_signature() {
             .build(),
         Bytes::from(prev_cell_data),
     );
-    // owner cell
+    // host's cell to receiver the capacity
     let input2_out_point = context.create_cell(
         CellOutput::new_builder()
             .capacity(1000u64.pack())
@@ -333,6 +333,7 @@ fn test_charge_by_owner_signature() {
         .cell_dep(rsa_dep)
         .build();
 
+    // owner key or member's key can charge
     for privkey in [&owner_privkey, &member1_privkey, &member2_privkey] {
         let witness_data = build_witness(privkey, Action::Charge, &message[..]);
         let witness = WitnessArgs::new_builder()
@@ -353,6 +354,7 @@ fn test_charge_by_owner_signature() {
         println!("consume cycles: {}", cycles);
     }
 
+    // Host key can not charge
     let witness_data = build_witness(&host_privkey, Action::Charge, &message[..]);
     let witness = WitnessArgs::new_builder()
         .input_type(Some(Bytes::from(witness_data)).pack())
