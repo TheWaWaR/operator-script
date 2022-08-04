@@ -3,13 +3,15 @@
 Build contracts:
 
 ``` sh
-capsule build
+make build-debug
+make build-release
 ```
 
 Run tests:
 
 ``` sh
-capsule test
+make test-debug
+make test-release
 ```
 
 ## `validate_signature_rsa` deploy info
